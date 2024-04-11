@@ -1,6 +1,6 @@
 # rd_vio
 
-This repo is the plain CMake version for rd-vio, extract and modified from [xrslam](https://github.com/openxrlab/xrslam). Check the original repo for detail.
+This repo is the plain CMake version for rd-vio, separated and modified from [xrslam](https://github.com/openxrlab/xrslam). Check the original repo for detail.
 
 *RD-VIO: Robust Visual-Inertial Odometry for Mobile Augmented Reality in Dynamic Environments*
 
@@ -8,9 +8,9 @@ And now it is:
 - mono visual-inertial odometry
 - single-thread only
 
-What is modified:
+What is removed:
 - global localizer
-- wrapped interface
+- global interface
 
 What is add:
 - a simple viewer using [Pangolin](https://github.com/stevenlovegrove/Pangolin)
