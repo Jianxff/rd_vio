@@ -6,7 +6,6 @@ This repo is the plain CMake version for rd-vio, separated and modified from [xr
 
 And now it is:
 - mono visual-inertial odometry
-- single-thread only
 
 What is removed:
 - global localizer
@@ -20,6 +19,11 @@ What is add:
 The main system APIs can be founded in 'src/rdvio/rdvio.hpp'
 
 EuRoC example can be founded in 'examples'
+
+Multi-threading is enabled by default, you can disable it by adding parameter when cmake:
+```sh
+cmake .. -DTHREADING=OFF
+```
 
 #### install
 Make sure you have installed:

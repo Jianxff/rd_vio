@@ -33,8 +33,8 @@ find_package(Ceres REQUIRED)
 find_package(yaml-cpp REQUIRED)
 
 ## multi thread
-option(threading "Enable multi-threading" ON)
-if(threading)
+option(THREADING "Enable multi-threading" ON)
+if(THREADING)
     add_definitions(-DUSE_MULTI_THREADING)
 endif()
 
