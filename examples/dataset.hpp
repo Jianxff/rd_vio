@@ -16,7 +16,7 @@ namespace dataset
 
 namespace fs = std::filesystem;
 
-static bool __log_d__ = true;
+static bool __log_d__ = false;
 /// @brief set logger flag
 void set_logger(const bool log) { __log_d__ = log; }
 
@@ -396,6 +396,12 @@ public:
         return data_[data_pt_++];
     }
 
+    /// @brief get camera rate
+    float cam_rate() { return cam_rate_hz_; }
+
+    /// @brief get imu rate
+    float imu_rate() { return imu_rate_hz_; }
+
 private:
     /// @brief load camera sensor calib and frame
     void _load_camera_data(bool stereo) {
@@ -427,6 +433,7 @@ private:
             int width = node["resolution"][0].as<int>();
             int height = node["resolution"][1].as<int>();
             resolution_ = cv::Size(width, height);
+            cam_rate_hz_ = node["rate_hz"].as<float>();
             auto intr_vec = vector_from_yaml<float>(node["intrinsics"]);
             intrinsic_[i] = intrinsict_t {
                 .fx = intr_vec(0),
@@ -471,6 +478,11 @@ private:
 
         if(__log_d__) std::cout << "[euroc] loaded " << cnt << " imu motion data" << std::endl;
 
+
+        // read yaml
+        fs::path imu_yaml = base_dir_ / "imu0" / "sensor.yaml";
+        YAML::Node node = YAML::LoadFile(imu_yaml.string());
+        imu_rate_hz_ = node["rate_hz"].as<float>();
     }
 
     /// @brief read image data
@@ -506,6 +518,8 @@ private:
     cv::Size resolution_;
     intrinsict_t intrinsic_[2];
     distortion_t distortion_[2];
+    float cam_rate_hz_;
+    float imu_rate_hz_;
     // Eigen::Matrix4f T_BS_[3];
 
     const bool motion_enabled_;

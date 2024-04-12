@@ -3,6 +3,11 @@
 #include <rdvio/types.h>
 #include <mutex>
 
+#ifdef USE_MULTI_THREADING
+#include <thread>
+#include <atomic>
+#endif
+
 namespace rdvio {
 
 class Config;
@@ -45,6 +50,10 @@ class Handler {
     std::vector<Eigen::Vector3d> get_landmark() const;
     std::vector<Eigen::Vector2i> get_keypoints() const;
 
+#ifdef USE_MULTI_THREADING
+    void exit();
+#endif
+
   private:
     void track_imu(const ImuData &imu);
     Pose predict_pose(const double &t);
@@ -61,6 +70,12 @@ class Handler {
     std::deque<ImuData> frontal_imus;
 
     std::shared_ptr<Config> config;
+
+#ifdef USE_MULTI_THREADING
+    std::thread t_frontend_;
+    std::thread t_feature_tracker_;
+    std::atomic<bool> exit_ = false;
+#endif
 };
 
 } // namespace rdvio

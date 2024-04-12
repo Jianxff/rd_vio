@@ -17,7 +17,9 @@ int main(int argc, char** argv) {
 
     auto euroc = dataset::EuRoC(mav_dir, true, false);
     dataset::set_logger(false);
+
     auto vio = rdvio::Odometry(calib_file, config_file);
+    
     auto viewer_setting = pviz::Settings();
     viewer_setting.follow = true;
     auto viewer = pviz::Viewer("euroc", viewer_setting);
@@ -31,32 +33,37 @@ int main(int argc, char** argv) {
             auto start = std::chrono::high_resolution_clock::now();
             
             vio.addMotion(data->timestamp.sec(), data->acc(), data->gyro());
-            
+
+#ifndef USE_MULTI_THREADING
             auto end = std::chrono::high_resolution_clock::now();
             auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
             if(elapsed > 0)
                 std::cout << "[rdvio] motion tracking takes " << elapsed << "ms" << std::endl;
+#else
+            std::this_thread::sleep_for(std::chrono::milliseconds(3));
+#endif            
         }
 
         if (data->has_cam0()) {
             auto start = std::chrono::high_resolution_clock::now();
 
             vio.addFrame(data->timestamp.sec(), data->cam0);
-            
+            viewer.publish_topic("input", data->cam0);
+
+#ifndef USE_MULTI_THREADING
             auto end = std::chrono::high_resolution_clock::now();
             auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
             if(elapsed > 0)
                 std::cout << "[rdvio] visual tracking takes " << elapsed << "ms" << std::endl;
-            
-            viewer.publish_topic("input", data->cam0);
+#else
+            std::this_thread::sleep_for(std::chrono::milliseconds(30));
+#endif            
         }
 
         if(vio.state() == 1) {
             viewer.publish_trajectory(vio.transform_world_cam());
             viewer.publish_local_point_cloud(vio.local_map());
         }
-
-        cv::waitKey(10);
     }
 
     cv::waitKey(0);

@@ -32,6 +32,12 @@ find_package(Eigen3 REQUIRED)
 find_package(Ceres REQUIRED)
 find_package(yaml-cpp REQUIRED)
 
+## multi thread
+option(threading "Enable multi-threading" ON)
+if(threading)
+    add_definitions(-DUSE_MULTI_THREADING)
+endif()
+
 ## source
 add_subdirectory(src)
 

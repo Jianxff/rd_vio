@@ -112,7 +112,9 @@ void FeatureTracker::run() {
 
 void FeatureTracker::track_frame(std::unique_ptr<Frame> frame) {
     frames.emplace_back(std::move(frame));
+#ifndef USE_MULTI_THREADING
     run();
+#endif
 }
 
 std::optional<std::tuple<double, PoseState, MotionState>>

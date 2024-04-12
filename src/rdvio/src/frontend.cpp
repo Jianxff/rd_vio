@@ -67,7 +67,9 @@ void Frontend::run() {
 
 void Frontend::issue_frame(Frame *frame) {
     pending_frame_ids.push_back(frame->id());
+#ifndef USE_MULTI_THREADING
     run();
+#endif
 }
 
 std::tuple<double, size_t, PoseState, MotionState>

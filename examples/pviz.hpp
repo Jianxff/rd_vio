@@ -101,7 +101,7 @@ public:
     float axes_size = 0.12f;
     float lmap_size = 3.0f;
     float gmap_size = 3.0f;
-    int tp_wait = 5;
+    float topic_wait_ms = 10;
     
 
 };  // class Settings
@@ -356,7 +356,7 @@ private:
                 cv::imshow(topic.first, img);
             } 
         }
-        cv::waitKey(SE.tp_wait);
+        cv::waitKey(SE.topic_wait_ms);
     }
 
     ///// trajectory

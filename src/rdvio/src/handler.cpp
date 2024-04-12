@@ -31,6 +31,24 @@ Handler::Handler(std::shared_ptr<Config> config) : config(config) {
     feature_tracker = std::make_shared<FeatureTracker>(config);
     frontend = std::make_shared<Frontend>(feature_tracker, config);
     feature_tracker->set_frontend(frontend);
+
+#ifdef USE_MULTI_THREADING
+    std::cout << "[handler] multi-threading enabled" << std::endl;
+    t_frontend_ = std::thread([this] { 
+        while( !exit_ ) {
+            frontend->run();
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+    });
+
+    t_feature_tracker_ = std::thread([this] {
+        while( !exit_ ) {
+            feature_tracker->run();
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        }
+    });
+#endif
+
 }
 
 const Config *Handler::configurations() const { return config.get(); }
@@ -192,5 +210,18 @@ std::vector<Eigen::Vector3d> Handler::get_landmark() const {
 std::vector<Eigen::Vector2i> Handler::get_keypoints() const {
     return feature_tracker->get_keypoints();
 }
+
+#ifdef USE_MULTI_THREADING
+void Handler::exit() {
+    exit_ = true;
+    if (t_frontend_.joinable()) {
+        t_frontend_.join();
+    }
+    if (t_feature_tracker_.joinable()) {
+        t_feature_tracker_.join();
+    }
+    std::cout << "[handler] multi-threading exited" << std::endl;
+}
+#endif
 
 } // namespace rdvio
