@@ -39,10 +39,19 @@ public:
     ~Odometry() = default;
 
     void addFrame(const double t, const cv::Mat& image) {
+        cv::Mat img_gray = image;   
+        // check channel
+        int channels = image.channels();
+        if(channels == 3 || channels == 4) 
+            cv::cvtColor(image, img_gray, channels == 3 ? cv::COLOR_BGR2GRAY : cv::COLOR_BGRA2GRAY);
+        else if(channels != 1) 
+            throw std::runtime_error("Invalid image channel, must be 1, 3 or 4");
+        // pack data
         auto image_ptr = std::make_shared<extra::OpenCvImage>();
-        image_ptr->image = image.clone();
+        image_ptr->image = img_gray.clone();
         image_ptr->raw = image.clone();
         image_ptr->t = t;
+        
         handler_->track_camera(image_ptr);
     }
 

@@ -685,11 +685,14 @@ public:
      * @note The ADVIO dataset is stored in a directory with the following structure:
     */
     ADVIO(const std::string& advio_dir, const int seq_id, const bool motion_d = true, const bool auto_free = false, const bool pre_load = false)
-        : Base(advio_dir + "-" + (seq_id < 10 ? "0" : "") + std::to_string(seq_id)), 
-          motion_enabled_(motion_d), auto_free_enabled_(auto_free)
+        : Base(advio_dir), motion_enabled_(motion_d), auto_free_enabled_(auto_free)
     {
+        seq_dir_ = base_dir_  
+                / ("advio-" + std::string(seq_id < 10 ? "0" : "") + std::to_string(seq_id))
+                / "iphone";
+        
         if(__log_d__) {
-            std::cout << "[dataset] load advio dataset from " << base_dir_ << std::endl;
+            std::cout << "[dataset] load advio dataset from " << seq_dir_.string() << std::endl;
             std::cout << "[advio] imu motion " << (motion_d ? "enabled" : "disabled") << std::endl;
         }   
 
@@ -717,6 +720,8 @@ public:
         // check avaliable for cam0 and load status
         if(data_at_pt->has_cam0() && data_at_pt->cam0.empty()) {
             cap_ >> data_at_pt->cam0;
+            // flip
+            cv::flip(data_at_pt->cam0, data_at_pt->cam0, -1);
             data_at_pt->cam0 = undistort_image(data_at_pt->cam0, intrinsic_, distortion_);
         }
 
@@ -731,7 +736,7 @@ private:
     /// @brief load frame data
     void _load_frame_data(bool preload) {
         // read mov
-        fs::path frame_mov = base_dir_ / "frames.mov";
+        fs::path frame_mov = seq_dir_ / "frames.mov";
         cap_.open(frame_mov.string());
         if(!cap_.isOpened()) {
             throw std::runtime_error("Cannot open video file: " + frame_mov.string());
@@ -745,7 +750,7 @@ private:
             std::cout << "[advio] preloading all image frames" << std::endl;
         }
 
-        fs::path frame_csv = base_dir_ / "frames.csv";
+        fs::path frame_csv = seq_dir_ / "frames.csv";
         auto csv = csvReader(frame_csv.string());
 
         size_t cnt = 0;
@@ -768,7 +773,7 @@ private:
     /// @brief load motion data
     void _load_motion_data() {
         // for accelerometer
-        fs::path acc_csv = base_dir_ / "accelerometer.csv";
+        fs::path acc_csv = seq_dir_ / "accelerometer.csv";
         auto csv = csvReader(acc_csv.string());
         
         size_t cnt = 0;
@@ -785,7 +790,7 @@ private:
         if(__log_d__) std::cout << "[advio] loaded " << cnt << " accelerometer data" << std::endl;
     
         // for gyroscope
-        fs::path gyro_csv = base_dir_ / "gyroscope.csv";
+        fs::path gyro_csv = seq_dir_ / "gyro.csv";
         csv = csvReader(gyro_csv.string());
 
         cnt = 0;
@@ -802,6 +807,7 @@ private:
         if(__log_d__) std::cout << "[advio] loaded " << cnt << " gyroscope data" << std::endl;
     }
 
+    fs::path seq_dir_;
     cv::VideoCapture cap_;
     int fps_;
 

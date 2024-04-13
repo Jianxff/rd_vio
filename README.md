@@ -16,14 +16,20 @@ What is add:
 - a simple dataset reader (currently euroc only)
 
 #### notes
-The main system APIs can be founded in 'src/rdvio/rdvio.hpp'
+The main system APIs can be founded in 'src/rdvio/rdvio.hpp'.
 
-EuRoC example can be founded in 'examples'
+EuRoC example can be found in 'examples', it works well on seq `v101-easy`.
 
 Multi-threading is enabled by default, you can disable it by adding parameter when cmake:
 ```sh
 cmake .. -DTHREADING=OFF
 ```
+
+
+\*About testing on [ADVIO](https://github.com/AaltoVision/ADVIO)
+- Basic code can be found in 'examples'
+- Still wrong estimation, working on it
+
 
 #### install
 Make sure you have installed:
@@ -48,7 +54,7 @@ make -j4
 #### test on EuRoC
 ```sh
 cd build
-./examples/euroc ../configs/euroc_sensor.yaml ../configs/euroc_slam.yaml $/path/to/euroc/mav0
+./examples/test_euroc ../configs/euroc_sensor.yaml ../configs/settings.yaml $/path/to/euroc/mav0
 ```
 
 #### preview

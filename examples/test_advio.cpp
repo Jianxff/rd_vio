@@ -16,7 +16,7 @@ int main(int argc, char** argv) {
     const int seq_id = std::stoi(argv[4]);
 
     auto advio = dataset::ADVIO(root_dir, seq_id);
-    dataset::set_logger(true);
+    dataset::set_logger(false);
 
     auto vio = rdvio::Odometry(calib_file, config_file);
 
@@ -28,18 +28,47 @@ int main(int argc, char** argv) {
     std::shared_ptr<dataset::dataclip_t> data;
 
     while((data = advio.next())) {
+        if(data->has_gyro()) {
+            auto start = std::chrono::high_resolution_clock::now();
+            vio.addGyro(data->timestamp.sec(), data->gyro());
+
+#ifndef USE_MULTI_THREADING
+            auto end = std::chrono::high_resolution_clock::now();
+            auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+            if(elapsed > 0)
+                std::cout << "[rdvio] motion tracking takes " << elapsed << "ms" << std::endl;
+#else
+            std::this_thread::sleep_for(std::chrono::milliseconds(1000 / 100));
+#endif
+        }
 
         if(data->has_acc()) {
+            auto start = std::chrono::high_resolution_clock::now();
             vio.addAcc(data->timestamp.sec(), data->acc());
-        }
 
-        if(data->has_gyro()) {
-            vio.addGyro(data->timestamp.sec(), data->gyro());
+#ifndef USE_MULTI_THREADING
+            auto end = std::chrono::high_resolution_clock::now();
+            auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+            if(elapsed > 0)
+                std::cout << "[rdvio] motion tracking takes " << elapsed << "ms" << std::endl;
+#else
+            std::this_thread::sleep_for(std::chrono::milliseconds(1000 / 100));
+#endif
         }
-
+        
         if(data->has_cam0()) {
+            auto start = std::chrono::high_resolution_clock::now();
             vio.addFrame(data->timestamp.sec(), data->cam0);
             viewer.publish_topic("input", data->cam0);
+
+#ifndef USE_MULTI_THREADING
+            auto end = std::chrono::high_resolution_clock::now();
+            auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+            if(elapsed > 0)
+                std::cout << "[rdvio] frame tracking takes " << elapsed << "ms" << std::endl;
+#else
+            std::this_thread::sleep_for(std::chrono::milliseconds(1000 / 60));
+#endif
         }
 
         if(vio.state() == 1) {

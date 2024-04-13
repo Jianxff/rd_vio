@@ -1,0 +1,54 @@
+%YAML:1.0
+# seq 1-12
+imu:
+  # inertial sensor noise model parameters (static)
+  gyroscope_noise_density: 0.0024       # [ rad / s / sqrt(Hz) ]
+  gyroscope_random_walk: 0.000051       # [ rad / s^2 / sqrt(Hz) ]
+  accelerometer_noise_density: 0.0048    # [ m / s^2 / sqrt(Hz) ]
+  accelerometer_random_walk: 0.00021    # [ m / s^3 / sqrt(Hz) ]
+  accelerometer_bias: [0.0407, -0.0623, 0.1017] # acc bias prior
+  gyroscope_bias: [-0.0067, 0.0070, -0.0065]     # gyro bias prior
+  extrinsic:
+    q_bi: [ 0.0, 0.0, 0.0, 1.0 ] # x y z w
+    p_bi: [ 0.0, 0.0, 0.0 ] # x y z [m]
+  noise:
+    cov_g: [
+      5.76e-6, 0.0, 0.0,
+      0.0, 5.76e-6, 0.0,
+      0.0, 0.0, 5.76e-6]
+    cov_a: [
+      2.304e-5, 0.0, 0.0,
+      0.0, 2.304e-5, 0.0,
+      0.0, 0.0, 2.304e-5]
+    cov_bg: [
+      2.601e-9, 0.0, 0.0,
+      0.0, 2.601e-9, 0.0,
+      0.0, 0.0, 2.601e-9]
+    cov_ba: [
+      4.41e-8, 0.0, 0.0,
+      0.0, 4.41e-8, 0.0,
+      0.0, 0.0, 4.41e-8]
+
+cam0:
+  # camera0 wrt. body frame
+  T_BS:
+    cols: 4
+    rows: 4
+    data: [0.9999763379093255, -0.004079205042965442, -0.005539287650170447, -0.008977668364731128,
+           -0.004066386342107199, -0.9999890330121858, 0.0023234365646622014, 0.07557012320238939,
+           -0.00554870467502187, -0.0023008567036498766, -0.9999819588046867, -0.005545773942541918,
+           0.0, 0.0, 0.0, 1.0]
+  resolution: [720, 1280]        # resolution of camera
+  camera_model: pinhole         # camera model
+  distortion_model: radtan      # distortion model
+  intrinsics: [1077.2, 1079.3, 362.14, 636.39] # fu, fv, cu, cv
+  camera_distortion_flag: 0     # use distortion model or not
+  distortion: [-0.0003, -0.0009, 0.0478, 0.0339] # k1, k2, p1, p2, xi
+  camera_readout_time: 0.0      # camera readout time
+  time_offset: 0.0              # camera time delay wrt. IMU
+  extrinsic:
+    q_bc: [ -0.0020364, -0.002772, -0.0011561, 0.9999934  ] # x y z w
+    p_bc: [ -0.008977668364731128, 0.07557012320238939, -0.005545773942541918 ] # x y z [m]
+  noise: [
+    0.5, 0.0,
+    0.0, 0.5] # [pixel^2]
