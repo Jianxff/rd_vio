@@ -116,17 +116,24 @@ struct dataclip_t {
     // imu accelerometer and gyroscope
     motion_t accelerometer, gyroscope;
     // flags
-    enum {CAM0 = 0, CAM1 = 1, DEPTH = 2, MOTION = 3};
-    bool available[4] = {false, false, false, false};
+    enum {CAM0 = 0, CAM1 = 1, DEPTH = 2, ACC = 3, GYRO = 4};
+    bool available[5] = {false, false, false, false, false};
+    /**
+     * @brief set and unset data availability
+    */
+    void set(const int idx) { available[idx] = true; }
+    void unset(const int idx) { available[idx] = false; }
     /**
      * @brief if dataclip valid
      * @note [Assert] one of cam0, cam1, depth, motion data should be available
     */
-    bool valid() { return available[0] && available[1] && available[2] && available[3]; }
+    bool valid() { return available[0] && available[1] && available[2] && available[3] && available[4]; }
     bool has_cam0() { return available[CAM0]; }
     bool has_cam1() { return available[CAM1]; }
     bool has_depth() { return available[DEPTH]; }
-    bool has_motion() { return available[MOTION]; }
+    bool has_acc() { return available[ACC]; }
+    bool has_gyro() { return available[GYRO]; }
+    bool has_motion() { return available[ACC] && available[GYRO]; }
     template <typename T = double>
     Eigen::Vector3<T> acc() { return accelerometer.eigen<T>(); }
     template <typename T = double>
@@ -140,7 +147,7 @@ struct dataclip_t {
  * @note [Convert] data can be converted to Eigen format using the eigen() function.
  * @note [Convert] data can be converted to cv::Mat format using the cv() function.
 */
-struct intrinsict_t {
+struct intrinsic_t {
     // camera intrinsict
     float fx, fy, cx, cy;
     /// @brief convert to Eigen
@@ -222,7 +229,7 @@ static Eigen::VectorX<T> vector_from_yaml(const YAML::Node& node) {
  * @param D distortion parameters
  * @note [Return] return undistorted image
 */
-static cv::Mat undistort_image(const cv::Mat& img, const intrinsict_t& K, const distortion_t& D) {
+static cv::Mat undistort_image(const cv::Mat& img, const intrinsic_t& K, const distortion_t& D) {
     cv::Mat undistorted;
     cv::undistort(img, undistorted, K.cv<float>(), D.cv<float>());
     return undistorted;
@@ -235,15 +242,114 @@ static cv::Mat undistort_image(const cv::Mat& img, const intrinsict_t& K, const 
  * @param height image height
  * @note [Return] return predicted intrinsic parameters
 */
-intrinsict_t predict_intrinsic(const int width, const int height) {
+intrinsic_t predict_intrinsic(const int width, const int height) {
     float focal = static_cast<float>(std::max(width, height)) * 1.2;
-    return intrinsict_t {
+    return intrinsic_t {
         .fx = focal,
         .fy = focal,
         .cx = static_cast<float>(width / 2),
         .cy = static_cast<float>(height / 2)
     };
 }
+
+
+/**
+ * @brief Simple csv reader
+*/
+class csvReader {
+public:
+    /**
+     * @brief Constructor
+     * @param filepath csv file path
+     * @note [Structure] data must be separated by comma ',' and comment with '#'
+    */
+    csvReader(const std::string& filepath) : ifs_(filepath) {
+        if(!ifs_.is_open()) {
+            throw std::runtime_error("cannot open file: " + filepath);
+        }
+        ss_cache_ = std::stringstream("");
+    }
+
+    /// @brief whether end of last data
+    bool isEnd() { return ss_end() && (ifs_.peek() == EOF || ifs_.eof()); }
+
+    /**
+     * @brief get next data
+     * @param n number of data to read, 1 by default
+     * @note [Return] return vector of data
+    */
+    template <typename T>
+    std::vector<T> next(size_t n = 1) {
+        std::vector<T> data;
+        for(size_t i = 0; i < n; i++) {
+            if(isEnd()) break;
+            T d = _read_next<T>();
+            data.push_back(d);
+        }
+        return data;
+    }
+
+    /**
+     * @brief ignore next data
+     * @param n number of data to ignore, 1 by default
+    */
+    void ignore(size_t n = 1) {
+        for(size_t i = 0; i < n; i++) {
+            if(isEnd()) break;
+            _read_next<std::string>();
+        }
+    }
+
+    /// @brief close file
+    void close() {
+        ifs_.close();
+    }
+
+private:
+    /// @brief read next single data
+    template <typename T>
+    T _read_next() {
+        if( ss_end() ) {
+            bool available = false;
+            std::string line = "";
+            while(!ifs_.eof()) {
+                std::getline(ifs_, line);
+                available = format_and_check(line);
+                if (available) break;
+            }
+            if(!available) return T();
+            else ss_cache_ = std::stringstream(line);
+        }
+        
+        T data;
+        ss_cache_ >> data;
+        if(ss_cache_.fail()) {
+            throw std::runtime_error("failed to read data of type: " + std::string(typeid(data).name()) + " from line: " + ss_cache_.str());
+        }
+        return data;
+    }
+
+    /// @brief format ane check line
+    bool format_and_check(std::string& line) {
+        if(line.size() == 0) return false;
+        std::replace(line.begin(), line.end(), ',', ' ');
+        std::replace(line.begin(), line.end(), '\t', ' ');
+        size_t first = line.find_first_not_of(' '), last = line.find_last_not_of(' ');
+        line = line.substr(first, last - first + 1);
+        return (!line.empty() && line.front() != '#');
+    }
+
+    bool ss_end() { 
+        if(ss_cache_.eof() || ss_cache_.str().empty()) return true;
+        char c = ss_cache_.peek();
+        return c == '\0' || c == '\n' || c == '\r' || c == EOF;
+    }
+
+    std::ifstream ifs_;
+    std::stringstream ss_cache_;
+
+}; // class CSV
+
 
 /**
  * @brief Base class
@@ -350,8 +456,8 @@ public:
     /**
      * @brief Constructor
      * @param mav_dir mav directory of EuRoC dataset
-     * @param load_motion load imu motion data (optional, true)
-     * @param load_cam1 load stereo cam1 data (optional, true)
+     * @param motion_d load imu motion data (optional, true)
+     * @param stereo_d load stereo cam1 data (optional, true)
      * @param auto_free auto free previous data (optional, false)
      * @param pre_load pre load all images (optional, false)
      * @note The EuRoC dataset is stored in a directory with the following structure:
@@ -381,7 +487,7 @@ public:
         // read for camera data
         const uint64_t ts = data_at_pt->timestamp.ns;
         // check avaliable for cam0 and load status
-        if(data_at_pt->available[dataclip_t::CAM0] && data_at_pt->cam0.empty()) {
+        if(data_at_pt->has_cam0() && data_at_pt->cam0.empty()) {
             data_at_pt->cam0 = _read_image(ts, 0);
         }
         // check avaliable for cam1 (stereo) and load status
@@ -411,18 +517,13 @@ private:
             fs::path cam_csv = base_dir_ / ("cam" + std::to_string(i)) / "data.csv";
             fs::path cam_data = base_dir_ / ("cam" + std::to_string(i)) / "data";
             fs::path cam_yaml = base_dir_ / ("cam" + std::to_string(i)) / "sensor.yaml";
-            std::ifstream ifs(cam_csv);
-            // read csv
-            std::string line;
+            auto csv = csvReader(cam_csv.string());
+            
             size_t cnt = 0;
-            while(!ifs.eof()) {
-                std::getline(ifs, line);
-                std::replace(line.begin(), line.end(), ',', ' ');
-                if(line.empty() || *line.begin() == '#') continue;
-                std::stringstream ss(line); uint64_t time_ns;
-                ss >> time_ns;
-                auto data = get_(time_ns, true);
-                data->available[i] = true;
+            while(!csv.isEnd()) {
+                auto ts = csv.next<uint64_t>()[0]; csv.ignore();
+                auto data = get_(ts, true);
+                data->set(i);
                 ++cnt;
             }
 
@@ -435,7 +536,7 @@ private:
             resolution_ = cv::Size(width, height);
             cam_rate_hz_ = node["rate_hz"].as<float>();
             auto intr_vec = vector_from_yaml<float>(node["intrinsics"]);
-            intrinsic_[i] = intrinsict_t {
+            intrinsic_[i] = intrinsic_t {
                 .fx = intr_vec(0),
                 .fy = intr_vec(1),
                 .cx = intr_vec(2),
@@ -457,22 +558,17 @@ private:
         if(__log_d__) std::cout << "[euroc] loading imu motion data" << std::endl;
 
         fs::path imu_csv = base_dir_ / "imu0" / "data.csv";
-        std::ifstream ifs(imu_csv);
-        // read csv
-        std::string line;
+        auto csv = csvReader(imu_csv.string());
+        
         size_t cnt = 0;
-        while(!ifs.eof()) {
-            std::getline(ifs, line);
-            std::replace(line.begin(), line.end(), ',', ' ');
-            if(line.empty() || *line.begin() == '#') continue;
-            std::stringstream ss(line); uint64_t time_ns; double x, y, z;
-            ss >> time_ns;
-            auto data = get_(time_ns, true);
-            ss >> x >> y >> z;
-            data->gyroscope = motion_t {x, y, z};
-            ss >> x >> y >> z;
-            data->accelerometer = motion_t {x, y, z};
-            data->available[dataclip_t::MOTION] = true;
+        while(!csv.isEnd()) {
+            auto ts = csv.next<uint64_t>()[0];
+            auto data = get_(ts, true);
+            auto val = csv.next<double>(6);
+            data->gyroscope = motion_t {val[0], val[1], val[2]};
+            data->accelerometer = motion_t {val[3], val[4], val[5]};
+            data->set(dataclip_t::GYRO);
+            data->set(dataclip_t::ACC);
             ++cnt;
         }
 
@@ -516,7 +612,7 @@ private:
     }
 
     cv::Size resolution_;
-    intrinsict_t intrinsic_[2];
+    intrinsic_t intrinsic_[2];
     distortion_t distortion_[2];
     float cam_rate_hz_;
     float imu_rate_hz_;
@@ -526,6 +622,197 @@ private:
     const bool stereo_enabled_;
     const bool auto_free_enabled_;
 }; // class EuRoC
+
+
+
+/**
+ * @brief ADVIO dataset
+ * @note [Get] Sequentially get data using next() function
+ * @note [Device] For iPhone captures only
+*/
+class ADVIO : public Base {
+/// @brief intrinsic parameters for iPhone
+const intrinsic_t seq_intrinsics_[4] = {
+    intrinsic_t {  // seq 1-12
+        .fx = 1077.2, .fy = 1079.3, .cx = 362.14, .cy = 636.39
+    },
+    intrinsic_t {  // seq 13-17
+        .fx = 1082.4, .fy = 1084.4, .cx = 364.68, .cy = 643.31
+    },
+    intrinsic_t {  // seq 18-19
+        .fx = 1076.9, .fy = 1078.5, .cx = 360.96, .cy = 639.31
+    },
+    intrinsic_t {  // seq 20-23
+        .fx = 1081.1, .fy = 1082.1, .cx = 359.59, .cy = 640.79
+    }
+};
+
+/// @brief distortion parameters for iPhone
+const distortion_t seq_distortions_[4] = {
+    distortion_t {  // seq 1-12
+        .k1 = -0.0003, .k2 = -0.0009, .p1 = 0.0478, .p2 = 0.0339
+    },
+    distortion_t {  // seq 13-17
+        .k1 = 0.0007, .k2 = -0.0002, .p1 = 0.0366, .p2 = 0.0803
+    },
+    distortion_t {  // seq 18-19
+        .k1 = -0.0054, .k2 = 0.0473, .p1 = 0.0510, .p2 = -0.0354
+    },
+    distortion_t {  // seq 20-23
+        .k1 = 0.0009, .k2 = -0.0018, .p1 = 0.0556, .p2 = -0.0454
+    }
+};
+
+/// @brief get group by seq id
+static int get_seq_group(const int seq_id) {
+    switch (seq_id) {
+        case 1 ... 12: return 0;
+        case 13 ... 17: return 1;
+        case 18 ... 19: return 2;
+        case 20 ... 23: return 3;
+        default: return -1;
+    }
+}
+
+public:
+    /**
+     * @brief Constructor
+     * @param advio_dir advio root directory
+     * @param seq_id sequence id
+     * @param motion_d motion data enabled (optional, true)
+     * @param auto_free auto free previous data (optional, false)
+     * @param pre_load pre load all images (optional, false)
+     * @note The ADVIO dataset is stored in a directory with the following structure:
+    */
+    ADVIO(const std::string& advio_dir, const int seq_id, const bool motion_d = true, const bool auto_free = false, const bool pre_load = false)
+        : Base(advio_dir + "-" + (seq_id < 10 ? "0" : "") + std::to_string(seq_id)), 
+          motion_enabled_(motion_d), auto_free_enabled_(auto_free)
+    {
+        if(__log_d__) {
+            std::cout << "[dataset] load advio dataset from " << base_dir_ << std::endl;
+            std::cout << "[advio] imu motion " << (motion_d ? "enabled" : "disabled") << std::endl;
+        }   
+
+        const int group_id = get_seq_group(seq_id);
+        if(group_id < 0) {
+            throw std::runtime_error("invalid seq id: " + std::to_string(seq_id));
+        }
+
+        // parameters
+        intrinsic_ = seq_intrinsics_[group_id];
+        distortion_ = seq_distortions_[group_id];
+
+        // load data
+        _load_frame_data(pre_load);
+        if(motion_d) _load_motion_data();
+
+        _order_by_time();
+    }
+
+    std::shared_ptr<dataclip_t> next() override {
+        if(data_pt_ >= data_.size()) return nullptr;
+        auto data_at_pt = data_[data_pt_];
+        // read for camera data
+        const uint64_t ts = data_at_pt->timestamp.ns;
+        // check avaliable for cam0 and load status
+        if(data_at_pt->has_cam0() && data_at_pt->cam0.empty()) {
+            cap_ >> data_at_pt->cam0;
+            data_at_pt->cam0 = undistort_image(data_at_pt->cam0, intrinsic_, distortion_);
+        }
+
+        if(__log_d__) std::cout << "[advio] " << (data_pt_ + 1) << " / " << data_.size() << " at " << ts << std::endl;
+
+        if(auto_free_enabled_) _free_last();
+
+        return data_[data_pt_++];
+    }
+
+private:
+    /// @brief load frame data
+    void _load_frame_data(bool preload) {
+        // read mov
+        fs::path frame_mov = base_dir_ / "frames.mov";
+        cap_.open(frame_mov.string());
+        if(!cap_.isOpened()) {
+            throw std::runtime_error("Cannot open video file: " + frame_mov.string());
+        }
+
+        resolution_ = cv::Size(cap_.get(cv::CAP_PROP_FRAME_WIDTH), cap_.get(cv::CAP_PROP_FRAME_HEIGHT));
+        fps_ = cap_.get(cv::CAP_PROP_FPS);
+        auto frame_count = cap_.get(cv::CAP_PROP_FRAME_COUNT);
+
+        if(__log_d__ && preload) {
+            std::cout << "[advio] preloading all image frames" << std::endl;
+        }
+
+        fs::path frame_csv = base_dir_ / "frames.csv";
+        auto csv = csvReader(frame_csv.string());
+
+        size_t cnt = 0;
+        while(!csv.isEnd()) {
+            double t = csv.next<double>()[0]; csv.ignore();
+            uint64_t time_ns = timestamp_t::from_second<double>(t).ns;
+            auto data = get_(time_ns, true);
+            data->set(dataclip_t::CAM0);
+            if(preload) {
+                cap_ >> data->cam0;
+                data->cam0 = undistort_image(data->cam0, intrinsic_, distortion_);
+            }
+            ++cnt;
+        }
+
+        if(__log_d__) std::cout << "[advio] loaded " << cnt << " frames for video" << std::endl;
+
+    }
+
+    /// @brief load motion data
+    void _load_motion_data() {
+        // for accelerometer
+        fs::path acc_csv = base_dir_ / "accelerometer.csv";
+        auto csv = csvReader(acc_csv.string());
+        
+        size_t cnt = 0;
+        while(!csv.isEnd()) {
+            double t = csv.next<double>()[0];
+            uint64_t time_ns = timestamp_t::from_second<double>(t).ns;
+            auto data = get_(time_ns, true);
+            auto acc_val = csv.next<double>(3);
+            data->accelerometer = motion_t {acc_val[0], acc_val[1], acc_val[2]};
+            data->set(dataclip_t::ACC);
+            ++cnt;
+        }
+
+        if(__log_d__) std::cout << "[advio] loaded " << cnt << " accelerometer data" << std::endl;
+    
+        // for gyroscope
+        fs::path gyro_csv = base_dir_ / "gyroscope.csv";
+        csv = csvReader(gyro_csv.string());
+
+        cnt = 0;
+        while(!csv.isEnd()) {
+            double t = csv.next<double>()[0];
+            uint64_t time_ns = timestamp_t::from_second<double>(t).ns;
+            auto data = get_(time_ns, true);
+            auto gyro_val = csv.next<double>(3);
+            data->gyroscope = motion_t {gyro_val[0], gyro_val[1], gyro_val[2]};
+            data->set(dataclip_t::GYRO);
+            ++cnt;
+        }
+
+        if(__log_d__) std::cout << "[advio] loaded " << cnt << " gyroscope data" << std::endl;
+    }
+
+    cv::VideoCapture cap_;
+    int fps_;
+
+    cv::Size resolution_;
+    intrinsic_t intrinsic_;
+    distortion_t distortion_;
+
+    const bool motion_enabled_;
+    const bool auto_free_enabled_;
+
+}; // class ADVIO
 
 
 
@@ -635,7 +922,7 @@ private:
             } 
             // for intrinsic 
             auto intr_vec = vector_from_yaml<float>(cam_node["intrinsics"]);
-            intrinsic_[i] = intrinsict_t {
+            intrinsic_[i] = intrinsic_t {
                 .fx = intr_vec(0),
                 .fy = intr_vec(1),
                 .cx = intr_vec(2),
@@ -685,7 +972,7 @@ private:
     std::unordered_map<uint64_t, fs::path> image_files_[2];
 
     cv::Size resolution_;
-    intrinsict_t intrinsic_[2];
+    intrinsic_t intrinsic_[2];
     distortion_t distortion_[2];
 
     const float fps_;
@@ -727,7 +1014,7 @@ public:
         auto data_at_pt = data_[data_pt_];
         // read for camera data
         if(data_at_pt->available[dataclip_t::CAM0] && data_at_pt->cam0.empty()) {
-            cap_.set(cv::CAP_PROP_POS_FRAMES, data_pt_);
+            // cap_.set(cv::CAP_PROP_POS_FRAMES, data_pt_);
             cap_ >> data_at_pt->cam0;
             data_at_pt->cam0 = undistort_image(data_at_pt->cam0, intrinsic_, distortion_);
         }
@@ -784,7 +1071,7 @@ private:
         } 
         // for intrinsic 
         auto intr_vec = vector_from_yaml<float>(cam_node["intrinsics"]);
-        intrinsic_ = intrinsict_t {
+        intrinsic_ = intrinsic_t {
             .fx = intr_vec(0),
             .fy = intr_vec(1),
             .cx = intr_vec(2),
@@ -807,7 +1094,7 @@ private:
     cv::VideoCapture cap_;
 
     cv::Size resolution_;
-    intrinsict_t intrinsic_;
+    intrinsic_t intrinsic_;
     distortion_t distortion_;
 
     float fps_;

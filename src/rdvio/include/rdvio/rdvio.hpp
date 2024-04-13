@@ -51,6 +51,14 @@ public:
         handler_->track_accelerometer(t, acc(0), acc(1), acc(2));
     }
 
+    void addAcc(const double t, const Eigen::Vector3d& acc) {
+        handler_->track_accelerometer(t, acc(0), acc(1), acc(2));
+    }
+
+    void addGyro(const double t, const Eigen::Vector3d& gyro) {
+        handler_->track_gyroscope(t, gyro(0), gyro(1), gyro(2));
+    }
+
     const Eigen::Matrix4d transform_world_cam() {
         auto state = handler_->get_latest_state();
         Pose pose = std::get<1>(state);
